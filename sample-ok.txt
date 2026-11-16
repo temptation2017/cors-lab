@@ -1,0 +1,15 @@
+# 虚构示例：JSON POST 预检通过
+
+# 请求
+Origin: https://app.example.com
+OPTIONS
+Access-Control-Request-Method: POST
+Access-Control-Request-Headers: content-type
+
+# 响应
+HTTP/1.1 204 No Content
+Access-Control-Allow-Origin: https://app.example.com
+Access-Control-Allow-Methods: GET, POST, OPTIONS
+Access-Control-Allow-Headers: Content-Type
+Access-Control-Max-Age: 7200
+Vary: Origin

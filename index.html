@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>cors-lab — 跨源请求本地放行检查</title>
+  <meta name="description" content="在浏览器里粘贴 Origin、方法和 CORS 响应头，本地判断浏览器会不会放行。不上传。">
+  <style>
+    :root {
+      --bg: #11151b;
+      --bg-2: #191e27;
+      --paper: #1f2630;
+      --ink: #e7edf4;
+      --muted: #8e99a8;
+      --line: #2c3542;
+      --amber: #e6b35a;
+      --amber-dim: rgba(230, 179, 90, 0.16);
+      --run: #3dbe86;
+      --run-bg: rgba(61, 190, 134, 0.16);
+      --block: #e05d4d;
+      --block-bg: rgba(224, 93, 77, 0.16);
+      --wait: #5b8def;
+      --wait-bg: rgba(91, 141, 239, 0.16);
+      --timed: #6dc8d4;
+      --unk: #7a8492;
+    }
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      padding: 0;
+      background: var(--bg);
+      color: var(--ink);
+    }
+    body {
+      font-family: "IBM Plex Sans", "Noto Sans SC", "Source Han Sans SC", "PingFang SC", "HarmonyOS Sans SC", "Microsoft YaHei", sans-serif;
+      line-height: 1.5;
+      min-height: 100vh;
+    }
+    .wrap { max-width: 1120px; margin: 0 auto; padding: 1.6rem 1.2rem 3rem; }
+    header h1 {
+      font-family: ui-monospace, "IBM Plex Mono", "SF Mono", "Cascadia Code", Menlo, Consolas, monospace;
+      font-size: 1.35rem;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+      margin: 0 0 0.35rem;
+    }
+    header h1 span { color: var(--amber); }
+    .lede { margin: 0; color: var(--muted); max-width: 48rem; }
+    .badge {
+      display: inline-block;
+      margin-left: 0.5rem;
+      padding: 0.05rem 0.45rem;
+      border: 1px solid var(--amber);
+      color: var(--amber);
+      font-size: 0.7rem;
+      vertical-align: middle;
+      letter-spacing: 0.04em;
+    }
+    .panel {
+      margin-top: 1.25rem;
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 0.9rem;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1rem;
+    }
+    @media (max-width: 800px) {
+      .grid { grid-template-columns: 1fr; }
+    }
+    label.meta, .field-label {
+      display: block;
+      color: var(--muted);
+      font-size: 0.78rem;
+      margin: 0 0 0.35rem;
+    }
+    .field { margin-top: 0.7rem; }
+    .field:first-child { margin-top: 0; }
+    input[type="text"], select, textarea {
+      width: 100%;
+      background: var(--bg);
+      color: var(--ink);
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 0.45rem 0.6rem;
+      font-family: ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas, monospace;
+      font-size: 0.82rem;
+    }
+    textarea {
+      min-height: 160px;
+      resize: vertical;
+      line-height: 1.45;
+      padding: 0.7rem 0.8rem;
+      font-size: 0.78rem;
+    }
+    input:focus, select:focus, textarea:focus {
+      outline: 2px solid var(--amber);
+      outline-offset: 1px;
+    }
+    .inline-fields {
+      display: grid;
+      grid-template-columns: 1fr 140px;
+      gap: 0.6rem;
+    }
+    @media (max-width: 600px) {
+      .inline-fields { grid-template-columns: 1fr; }
+    }
+    .toggles {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.7rem 1.1rem;
+      align-items: center;
+      margin-top: 0.7rem;
+    }
+    .toggle {
+      color: var(--muted);
+      font-size: 0.82rem;
+      display: inline-flex;
+      gap: 0.35rem;
+      align-items: center;
+    }
+    .row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.45rem;
+      align-items: center;
+      margin-top: 0.65rem;
+    }
+    button {
+      background: var(--bg-2);
+      color: var(--ink);
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 0.32rem 0.7rem;
+      font: inherit;
+      font-size: 0.86rem;
+      cursor: pointer;
+    }
+    button:hover { border-color: var(--amber); color: var(--amber); }
+    button.primary { background: var(--amber-dim); border-color: var(--amber); color: var(--amber); }
+    .hint { color: var(--muted); font-size: 0.8rem; margin-left: auto; }
+    .verdict {
+      border-radius: 8px;
+      padding: 0.85rem 1rem;
+      margin-top: 1.25rem;
+      border: 1px solid var(--line);
+    }
+    .verdict.allow { border-color: var(--run); background: var(--run-bg); }
+    .verdict.block { border-color: var(--block); background: var(--block-bg); }
+    .verdict h2 {
+      margin: 0 0 0.35rem;
+      font-size: 1.05rem;
+      font-family: ui-monospace, Menlo, Consolas, monospace;
+    }
+    .verdict.allow h2 { color: var(--run); }
+    .verdict.block h2 { color: var(--block); }
+    .verdict p { margin: 0; color: var(--ink); }
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      gap: 0.6rem;
+      margin-top: 1rem;
+    }
+    .stat {
+      background: var(--bg-2);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 0.7rem 0.8rem;
+    }
+    .stat .k { color: var(--muted); font-size: 0.75rem; }
+    .stat .v {
+      font-family: ui-monospace, Menlo, Consolas, monospace;
+      font-size: 0.95rem;
+      margin-top: 0.15rem;
+      word-break: break-all;
+    }
+    .checks { margin-top: 0.3rem; }
+    .check {
+      border-top: 1px solid var(--line);
+      padding: 0.7rem 0.1rem;
+    }
+    .check:first-child { border-top: none; }
+    .check .ctitle {
+      display: flex;
+      gap: 0.5rem;
+      align-items: baseline;
+    }
+    .tag {
+      flex: 0 0 auto;
+      font-size: 0.72rem;
+      border-radius: 99px;
+      padding: 0.05rem 0.45rem;
+      border: 1px solid var(--line);
+      color: var(--muted);
+      letter-spacing: 0.04em;
+    }
+    .tag.pass { border-color: var(--run); color: var(--run); background: var(--run-bg); }
+    .tag.fail { border-color: var(--block); color: var(--block); background: var(--block-bg); }
+    .tag.warn { border-color: var(--amber); color: var(--amber); background: var(--amber-dim); }
+    .tag.info { border-color: var(--wait); color: var(--wait); background: var(--wait-bg); }
+    .check .name { font-weight: 600; }
+    .check .detail { color: var(--muted); font-size: 0.86rem; margin: 0.25rem 0 0 3.1rem; }
+    .fixes {
+      margin-top: 0.8rem;
+      border: 1px solid var(--amber);
+      background: var(--amber-dim);
+      border-radius: 8px;
+      padding: 0.75rem 1rem;
+    }
+    .fixes h3 { margin: 0 0 0.4rem; font-size: 0.92rem; color: var(--amber); }
+    .fixes ul { margin: 0; padding-left: 1.1rem; }
+    .fixes li { margin: 0.2rem 0; }
+    footer {
+      margin-top: 2rem;
+      color: var(--muted);
+      font-size: 0.82rem;
+    }
+    footer a { color: var(--amber); text-decoration: none; }
+    footer a:hover { text-decoration: underline; }
+    code {
+      font-family: ui-monospace, Menlo, Consolas, monospace;
+      font-size: 0.86em;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <h1>cors<span>-lab</span> <span class="badge">本地 · 不上传</span></h1>
+      <p class="lede">把请求的 <code>Origin</code>、方法、请求头，以及响应里的 CORS 头贴进来，在浏览器里本地判断这次跨源请求会不会被放行、是简单请求还是要先预检，以及常见踩坑（<code>*</code> 配凭证、Authorization 不能靠通配符、预检不是 2xx）。全部在本机计算。</p>
+    </header>
+
+    <div class="panel">
+      <div class="row" style="margin-top:0">
+        <button type="button" class="primary" data-sample="simpleOk">简单 GET 放行</button>
+        <button type="button" data-sample="jsonPreflightOk">JSON POST 预检通过</button>
+        <button type="button" data-sample="credStar">凭证 + 通配符</button>
+        <button type="button" data-sample="originMismatch">Origin 不匹配</button>
+        <button type="button" data-sample="authStar">Authorization 只写了 *</button>
+        <button type="button" data-sample="fileNull">本地 file://</button>
+        <button type="button" id="btn-clear">清空</button>
+        <button type="button" id="btn-md">复制 Markdown 摘要</button>
+        <span class="hint" id="status"></span>
+      </div>
+    </div>
+
+    <div class="grid">
+      <div class="panel">
+        <label class="meta">请求</label>
+        <div class="inline-fields">
+          <div class="field" style="margin-top:0">
+            <label class="field-label" for="origin">Origin</label>
+            <input type="text" id="origin" spellcheck="false" placeholder="https://app.example.com 或 null" autocomplete="off">
+          </div>
+          <div class="field" style="margin-top:0">
+            <label class="field-label" for="method">方法</label>
+            <input type="text" id="method" spellcheck="false" placeholder="GET" list="methods" autocomplete="off">
+            <datalist id="methods">
+              <option value="GET">
+              <option value="POST">
+              <option value="PUT">
+              <option value="PATCH">
+              <option value="DELETE">
+              <option value="OPTIONS">
+              <option value="HEAD">
+            </datalist>
+          </div>
+        </div>
+        <div class="toggles">
+          <label class="toggle"><input type="checkbox" id="credentialed"> 携带凭证（Cookie / withCredentials）</label>
+          <label class="toggle">检查对象
+            <select id="assume">
+              <option value="auto">自动判断</option>
+              <option value="actual">实际响应</option>
+              <option value="preflight">预检响应</option>
+            </select>
+          </label>
+        </div>
+        <div class="field">
+          <label class="field-label" for="req">请求头（可选）</label>
+          <textarea id="req" spellcheck="false" placeholder="Content-Type: application/json&#10;Authorization: Bearer demo-token&#10;或预检中的：&#10;Access-Control-Request-Method: POST&#10;Access-Control-Request-Headers: content-type"></textarea>
+        </div>
+      </div>
+      <div class="panel">
+        <label class="meta" for="res">响应头</label>
+        <textarea id="res" spellcheck="false" placeholder="HTTP/1.1 204 No Content&#10;Access-Control-Allow-Origin: https://app.example.com&#10;Access-Control-Allow-Methods: GET, POST, OPTIONS&#10;Access-Control-Allow-Headers: Content-Type&#10;Vary: Origin"></textarea>
+      </div>
+    </div>
+
+    <div id="out"></div>
+
+    <footer>
+      纯前端工具，不会把粘贴内容发到任何服务器。示例里的域名、令牌都是虚构的。实现按 <a href="https://fetch.spec.whatwg.org/#http-cors-protocol">Fetch CORS</a> 的常见浏览器行为做判断，不能替代真实浏览器。源码：<a href="https://github.com/temptation2017/cors-lab">temptation2017/cors-lab</a> · MIT
+    </footer>
+  </div>
+  <script src="cors.js"></script>
+  <script>
+    (function () {
+      var originEl = document.getElementById('origin');
+      var methodEl = document.getElementById('method');
+      var credEl = document.getElementById('credentialed');
+      var assumeEl = document.getElementById('assume');
+      var reqEl = document.getElementById('req');
+      var resEl = document.getElementById('res');
+      var out = document.getElementById('out');
+      var statusEl = document.getElementById('status');
+      var last = null;
+
+      function esc(s) {
+        return String(s)
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;');
+      }
+
+      function tagLabel(level) {
+        if (level === 'pass') return '通过';
+        if (level === 'fail') return '失败';
+        if (level === 'warn') return '注意';
+        return '说明';
+      }
+
+      function render() {
+        var result = CorsLab.analyze({
+          origin: originEl.value,
+          method: methodEl.value,
+          credentialed: credEl.checked,
+          assume: assumeEl.value,
+          requestHeadersText: reqEl.value,
+          responseText: resEl.value
+        });
+        last = result;
+        if (!originEl.value.trim() && !resEl.value.trim() && !reqEl.value.trim()) {
+          out.innerHTML = '';
+          return;
+        }
+        var checks = result.checks.map(function (c) {
+          return '<div class="check">' +
+            '<div class="ctitle"><span class="tag ' + c.level + '">' + tagLabel(c.level) + '</span>' +
+            '<span class="name">' + esc(c.title) + '</span></div>' +
+            (c.detail ? '<div class="detail">' + esc(c.detail) + '</div>' : '') +
+            '</div>';
+        }).join('');
+        var fixes = '';
+        if (result.suggestedFixes.length) {
+          fixes = '<div class="fixes"><h3>可尝试的改法</h3><ul>' +
+            result.suggestedFixes.map(function (f) { return '<li>' + esc(f) + '</li>'; }).join('') +
+            '</ul></div>';
+        }
+        var modeLabel = result.mode === 'preflight' ? '预检响应' : '实际响应';
+        var simpleLabel = result.classification.simple ? '简单请求' : '需预检';
+        var verdictTitle = result.verdict === 'allow' ? '预计放行' : '预计拦截';
+        out.innerHTML =
+          '<div class="verdict ' + result.verdict + '">' +
+            '<h2>' + verdictTitle + '</h2>' +
+            '<p>' + esc(result.summary) + '</p>' +
+          '</div>' +
+          '<div class="stats">' +
+            '<div class="stat"><div class="k">Origin</div><div class="v">' + esc(result.origin.value || '—') + '</div></div>' +
+            '<div class="stat"><div class="k">方法</div><div class="v">' + esc(result.method) + '</div></div>' +
+            '<div class="stat"><div class="k">类型</div><div class="v">' + simpleLabel + '</div></div>' +
+            '<div class="stat"><div class="k">检查对象</div><div class="v">' + modeLabel + '</div></div>' +
+            '<div class="stat"><div class="k">携带凭证</div><div class="v">' + (result.credentialed ? '是' : '否') + '</div></div>' +
+          '</div>' +
+          '<div class="panel"><div class="checks">' + checks + '</div>' + fixes + '</div>';
+      }
+
+      function loadSample(key) {
+        var s = CorsLab.samples[key];
+        if (!s) return;
+        originEl.value = s.origin;
+        methodEl.value = s.method;
+        credEl.checked = !!s.credentialed;
+        assumeEl.value = 'auto';
+        reqEl.value = s.requestHeadersText || '';
+        resEl.value = s.responseText || '';
+        render();
+        statusEl.textContent = '已载入示例：' + s.label;
+      }
+
+      ['origin', 'method', 'req', 'res'].forEach(function (id) {
+        document.getElementById(id).addEventListener('input', render);
+      });
+      credEl.addEventListener('change', render);
+      assumeEl.addEventListener('change', render);
+
+      document.querySelectorAll('[data-sample]').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          loadSample(btn.getAttribute('data-sample'));
+        });
+      });
+
+      document.getElementById('btn-clear').addEventListener('click', function () {
+        originEl.value = '';
+        methodEl.value = '';
+        credEl.checked = false;
+        assumeEl.value = 'auto';
+        reqEl.value = '';
+        resEl.value = '';
+        last = null;
+        out.innerHTML = '';
+        statusEl.textContent = '已清空';
+      });
+
+      document.getElementById('btn-md').addEventListener('click', function () {
+        if (!last) render();
+        if (!last || (!originEl.value.trim() && !resEl.value.trim())) {
+          statusEl.textContent = '先填写 Origin 和响应头';
+          return;
+        }
+        var text = CorsLab.toMarkdown(last);
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(text).then(function () {
+            statusEl.textContent = '已复制 Markdown';
+          }).catch(function () {
+            statusEl.textContent = '复制失败，请手动选择';
+          });
+        } else {
+          statusEl.textContent = '当前环境不支持一键复制';
+        }
+      });
+
+      loadSample('simpleOk');
+    })();
+  </script>
+</body>
+</html>
